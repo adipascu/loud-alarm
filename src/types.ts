@@ -10,5 +10,6 @@ export interface Status {
   minute: number;
   secondsRemaining: number;
   forceVolume: boolean;
+  volumeLevel: number;
   sound: SoundKind;
 }

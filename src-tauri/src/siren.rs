@@ -11,9 +11,9 @@ use std::str::FromStr;
 use std::time::Duration;
 
 const SAMPLE_RATE: u32 = 44_100;
-/// Kept below full scale so the square edges don't hard-clip the DAC into mush;
-/// real loudness comes from forcing the *system* volume to max.
-const AMPLITUDE: f32 = 0.5;
+/// Kept just below full scale so the square edges don't hard-clip the DAC into
+/// mush; final loudness is set by the system volume or the in-app gain.
+const AMPLITUDE: f32 = 0.8;
 
 /// The selectable alarm sounds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]

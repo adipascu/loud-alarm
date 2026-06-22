@@ -132,6 +132,12 @@ body {
   accent-color: var(--accent);
 }
 
+.slider {
+  width: 100%;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
 .hint {
   font-size: 0.8rem;
   color: var(--muted);

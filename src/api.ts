@@ -6,8 +6,15 @@ export function armAlarm(
   minute: number,
   sound: SoundKind,
   forceVolume: boolean,
+  volumeLevel: number,
 ): Promise<Status> {
-  return invoke<Status>("arm_alarm", { hour, minute, sound, forceVolume });
+  return invoke<Status>("arm_alarm", {
+    hour,
+    minute,
+    sound,
+    forceVolume,
+    volumeLevel,
+  });
 }
 
 export function disarmAlarm(): Promise<Status> {
@@ -22,6 +29,9 @@ export function getStatus(): Promise<Status> {
   return invoke<Status>("get_status");
 }
 
-export function previewSound(sound: SoundKind): Promise<void> {
-  return invoke<void>("preview_sound", { sound });
+export function previewSound(
+  sound: SoundKind,
+  volumeLevel: number,
+): Promise<void> {
+  return invoke<void>("preview_sound", { sound, volumeLevel });
 }

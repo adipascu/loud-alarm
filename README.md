@@ -3,9 +3,11 @@
 A loud, cross-platform desktop alarm built with **Tauri 2 + SolidJS + TypeScript**.
 It is designed to actually wake you up:
 
-- **Loud** - rings a piercing, procedurally generated siren on a loop until you stop it.
-- **Beats a muted / zero volume** - before every ring it force-unmutes the system and drives the output volume to maximum.
+- **Loud** - rings a piercing, procedurally generated siren on a loop until you stop it, at a volume level you choose.
+- **Beats a muted / zero volume** - optionally snapshots your system volume, overrides it (unmuted) for the ring, and restores it exactly afterwards, so it wakes you without permanently changing your setting.
+- **Never changes your volume (optional)** - turn the override off and the chosen level is applied as in-app gain only; your system volume is never touched.
 - **Sounds through Focus / Do Not Disturb** - the alarm is played as *media audio*, not a notification. macOS Focus (and equivalent modes) silence notifications, not the media path, so the alarm still rings.
+- **Keeps ringing after you close the window** - closing hides the app to a tray icon; the alarm still fires and brings the window back when it does.
 
 > Status: **beta** (`v0.1.0-beta.1`). Works today on macOS; Linux uses PulseAudio/PipeWire for the volume override, Windows volume override is best-effort (see [Platform support](#platform-support)).
 
@@ -24,20 +26,22 @@ Grab an installer for your OS from the [Releases page](https://github.com/adipas
 ## Usage
 
 1. Launch **Loud Alarm**.
-2. Pick a time (defaults to `17:00`), choose a sound (Siren / Beep / Chirp), and **Preview** it.
-3. Leave **Force max volume** on so it rings even if the machine is muted.
+2. Pick a time (defaults to `07:00`), choose a sound (Siren / Beep / Chirp), set the **Volume** slider, and **Preview** it.
+3. Leave **Override system volume** on so it rings even if the machine is muted (your volume is restored when it stops). Turn it off to keep your system volume untouched and use in-app gain only.
 4. Click **Arm alarm**. The window shows a live countdown.
-5. When it fires, the whole window turns into a flashing **RINGING** screen - hit **Stop** (it also auto-stops after 5 minutes).
+5. You can close the window: the app keeps running in the tray and still rings. When it fires, the window reappears as a flashing **RINGING** screen - hit **Stop** (it also auto-stops after 5 minutes). Quit fully from the tray menu.
 
-> The app must be running for the alarm to fire. It does **not** try to wake a sleeping machine; keep it open (e.g. minimized) until the alarm time.
+> The app process must be running for the alarm to fire (closing the window is fine; quitting is not). It does **not** wake a sleeping machine; keep the Mac awake until the alarm time.
 
 ## How it meets the "wake me up" requirements
 
 | Requirement | How |
 |---|---|
-| Loud | Square-wave siren looped continuously through the audio device |
-| Beats muted / 0 volume | `volume::maximize()` force-unmutes and sets output to 100% before every burst, re-asserting each loop |
+| Loud, configurable | Square-wave siren looped continuously; volume set by the slider |
+| Beats muted / 0 volume | When override is on, `volume::snapshot()` saves your volume + mute, `volume::apply()` forces the chosen level (unmuted) each burst, and the saved state is restored when ringing ends |
+| Without changing system volume | With override off, the level is applied as in-app gain (`Sink::set_volume`); the system volume is never read or written |
 | Sounds through Focus / DND | Audio plays via the media path (rodio → CoreAudio/WASAPI/ALSA); Focus only gates notifications |
+| Rings after window close | A background scheduler thread lives for the whole process; closing only hides the window to the tray |
 
 ## Develop
 
@@ -74,7 +78,7 @@ pnpm tauri build    # produces native installers in src-tauri/target/release/bun
 ## Architecture
 
 - `src-tauri/src/siren.rs` - procedurally synthesised tones (no shipped audio assets).
-- `src-tauri/src/volume.rs` - cross-platform "make it audible" volume control.
+- `src-tauri/src/volume.rs` - cross-platform system-volume snapshot / override / restore.
 - `src-tauri/src/schedule.rs` - pure "next occurrence of HH:MM" logic (unit-tested).
 - `src-tauri/src/alarm.rs` - the engine: scheduler thread + ring thread + state.
 - `src/` - SolidJS + TypeScript UI that talks to the Rust commands.

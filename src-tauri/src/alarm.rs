@@ -11,6 +11,12 @@
 //! The scheduler keeps running as long as the process is alive, independent of
 //! whether any window is visible, and the ring thread surfaces the main window
 //! so the alarm is visible (and stoppable) even if it was hidden to the tray.
+//!
+//! Loudness has two modes:
+//! - `force_volume`: snapshot the system volume, override it to `volume_level`
+//!   (and unmute) for the ring, then restore it exactly afterwards;
+//! - otherwise: leave the system volume untouched and apply `volume_level` as
+//!   in-app playback gain only.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -35,7 +41,6 @@ pub struct AlarmEngine {
     inner: Mutex<State>,
 }
 
-#[derive(Default)]
 struct State {
     armed: bool,
     target: Option<DateTime<Local>>,
@@ -43,14 +48,32 @@ struct State {
     minute: u32,
     sound: SoundKind,
     force_volume: bool,
+    volume_level: u8,
     ringing: bool,
     stop: Option<Arc<AtomicBool>>,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self {
+            armed: false,
+            target: None,
+            hour: 0,
+            minute: 0,
+            sound: SoundKind::default(),
+            force_volume: true,
+            volume_level: 100,
+            ringing: false,
+            stop: None,
+        }
+    }
 }
 
 /// What the ring thread needs, captured atomically at fire time.
 struct RingConfig {
     sound: SoundKind,
     force_volume: bool,
+    volume_level: u8,
     stop: Arc<AtomicBool>,
 }
 
@@ -64,6 +87,7 @@ pub struct Status {
     pub minute: u32,
     pub seconds_remaining: i64,
     pub force_volume: bool,
+    pub volume_level: u8,
     pub sound: SoundKind,
 }
 
@@ -84,6 +108,7 @@ impl AlarmEngine {
             minute: state.minute,
             seconds_remaining: remaining,
             force_volume: state.force_volume,
+            volume_level: state.volume_level,
             sound: state.sound,
         }
     }
@@ -98,6 +123,7 @@ impl AlarmEngine {
         minute: u32,
         sound: SoundKind,
         force_volume: bool,
+        volume_level: u8,
     ) -> Result<Status, String> {
         schedule::validate(hour, minute)?;
         let target = schedule::next_occurrence(Local::now(), hour, minute);
@@ -109,6 +135,7 @@ impl AlarmEngine {
         state.minute = minute;
         state.sound = sound;
         state.force_volume = force_volume;
+        state.volume_level = volume_level.min(100);
         Ok(Self::snapshot(&state))
     }
 
@@ -127,12 +154,13 @@ impl AlarmEngine {
         Self::snapshot(&state)
     }
 
-    /// Play the chosen sound briefly at the current volume, for the UI preview
-    /// button. Never touches the system volume.
-    pub fn preview(&self, sound: SoundKind) {
+    /// Play the chosen sound briefly at the given in-app gain, for the UI
+    /// preview button. Never touches the system volume.
+    pub fn preview(&self, sound: SoundKind, volume_level: u8) {
         thread::spawn(move || {
             if let Ok((_stream, handle)) = OutputStream::try_default() {
                 if let Ok(sink) = Sink::try_new(&handle) {
+                    sink.set_volume(f32::from(volume_level.min(100)) / 100.0);
                     sink.append(Tone::new(sound, Duration::from_millis(1200)));
                     sink.sleep_until_end();
                 }
@@ -159,6 +187,7 @@ impl AlarmEngine {
                     Some(RingConfig {
                         sound: state.sound,
                         force_volume: state.force_volume,
+                        volume_level: state.volume_level,
                         stop: flag,
                     })
                 } else {
@@ -183,14 +212,24 @@ impl AlarmEngine {
             let _ = window.set_focus();
         }
 
+        // Borrow the system volume only if asked; restore it exactly afterwards.
+        let saved = if config.force_volume {
+            volume::snapshot()
+        } else {
+            None
+        };
+
         let started = Instant::now();
         if let Ok((_stream, handle)) = OutputStream::try_default() {
             if let Ok(sink) = Sink::try_new(&handle) {
+                if !config.force_volume {
+                    sink.set_volume(f32::from(config.volume_level) / 100.0);
+                }
                 while !config.stop.load(Ordering::SeqCst)
                     && started.elapsed().as_secs() < MAX_RING_SECS
                 {
                     if config.force_volume {
-                        let _ = volume::maximize();
+                        let _ = volume::apply(config.volume_level, false);
                     }
                     sink.append(Tone::new(config.sound, RING_BURST));
                     sink.sleep_until_end();
@@ -198,6 +237,11 @@ impl AlarmEngine {
                 sink.stop();
             }
         }
+
+        if let Some(saved) = saved {
+            let _ = volume::apply(saved.level, saved.muted);
+        }
+
         // Ringing finished (stopped, timed out, or no audio device).
         let mut state = self.inner.lock().unwrap();
         state.ringing = false;
@@ -212,10 +256,11 @@ mod tests {
     #[test]
     fn arm_then_disarm_updates_status() {
         let engine = AlarmEngine::new();
-        let status = engine.arm(17, 0, SoundKind::Siren, true).unwrap();
+        let status = engine.arm(17, 0, SoundKind::Siren, true, 80).unwrap();
         assert!(status.armed);
         assert_eq!(status.hour, 17);
         assert!(status.force_volume);
+        assert_eq!(status.volume_level, 80);
         assert!(status.seconds_remaining > 0);
 
         let status = engine.disarm();
@@ -225,7 +270,14 @@ mod tests {
     #[test]
     fn arm_rejects_invalid_time() {
         let engine = AlarmEngine::new();
-        assert!(engine.arm(25, 0, SoundKind::Beep, true).is_err());
+        assert!(engine.arm(25, 0, SoundKind::Beep, true, 100).is_err());
+    }
+
+    #[test]
+    fn arm_clamps_volume_to_100() {
+        let engine = AlarmEngine::new();
+        let status = engine.arm(8, 30, SoundKind::Chirp, true, 250).unwrap();
+        assert_eq!(status.volume_level, 100);
     }
 
     #[test]

@@ -13,9 +13,10 @@ import "./App.css";
 const POLL_MS = 500;
 
 function App() {
-  const [time, setTime] = createSignal("17:00");
+  const [time, setTime] = createSignal("07:00");
   const [sound, setSound] = createSignal<SoundKind>("Siren");
   const [forceVolume, setForceVolume] = createSignal(true);
+  const [volumeLevel, setVolumeLevel] = createSignal(100);
   const [status, setStatus] = createSignal<Status | null>(null);
   const [error, setError] = createSignal("");
 
@@ -42,7 +43,13 @@ function App() {
     }
     try {
       setStatus(
-        await armAlarm(parsed.hour, parsed.minute, sound(), forceVolume()),
+        await armAlarm(
+          parsed.hour,
+          parsed.minute,
+          sound(),
+          forceVolume(),
+          volumeLevel(),
+        ),
       );
     } catch (e) {
       setError(String(e));
@@ -99,11 +106,27 @@ function App() {
                       <button
                         type="button"
                         class="btn btn-ghost"
-                        onClick={() => void previewSound(sound())}
+                        onClick={() =>
+                          void previewSound(sound(), volumeLevel())
+                        }
                       >
                         Preview
                       </button>
                     </div>
+                  </label>
+
+                  <label class="field">
+                    <span>Volume: {volumeLevel()}%</span>
+                    <input
+                      class="slider"
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={volumeLevel()}
+                      onInput={(e) =>
+                        setVolumeLevel(Number(e.currentTarget.value))
+                      }
+                    />
                   </label>
 
                   <label class="toggle">
@@ -113,13 +136,15 @@ function App() {
                       onChange={(e) => setForceVolume(e.currentTarget.checked)}
                     />
                     <span>
-                      Force max volume (rings even when muted or at 0)
+                      Override system volume so it rings even when muted
+                      (restored afterwards)
                     </span>
                   </label>
 
                   <p class="hint">
                     Plays as media audio, so Focus / Do Not Disturb will not
-                    silence it.
+                    silence it. With override off, the volume above is applied
+                    in-app and your system volume is never touched.
                   </p>
 
                   <button

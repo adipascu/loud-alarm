@@ -24,9 +24,10 @@ fn arm_alarm(
     minute: u32,
     sound: String,
     force_volume: bool,
+    volume_level: u8,
 ) -> Result<Status, String> {
     let kind = SoundKind::from_str(&sound)?;
-    engine.arm(hour, minute, kind, force_volume)
+    engine.arm(hour, minute, kind, force_volume, volume_level)
 }
 
 #[tauri::command]
@@ -45,9 +46,9 @@ fn get_status(engine: State<'_, Engine>) -> Status {
 }
 
 #[tauri::command]
-fn preview_sound(engine: State<'_, Engine>, sound: String) -> Result<(), String> {
+fn preview_sound(engine: State<'_, Engine>, sound: String, volume_level: u8) -> Result<(), String> {
     let kind = SoundKind::from_str(&sound)?;
-    engine.preview(kind);
+    engine.preview(kind, volume_level);
     Ok(())
 }
 
