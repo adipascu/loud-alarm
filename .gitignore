@@ -1,0 +1,13 @@
+node_modules
+dist
+dist-ssr
+coverage
+
+# Editor / OS
+.DS_Store
+*.local
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln

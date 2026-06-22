@@ -1,0 +1,32 @@
+[package]
+name = "loud-alarm"
+version = "0.1.0"
+description = "A loud cross-platform alarm that beats a muted system volume and sounds through Focus / Do Not Disturb"
+authors = ["adipascu"]
+license = "MIT"
+repository = "https://github.com/adipascu/loud-alarm"
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "loud_alarm_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+rodio = { version = "0.19", default-features = false }
+
+[profile.release]
+panic = "abort"
+strip = true
+lto = true
+opt-level = "s"
