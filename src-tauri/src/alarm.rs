@@ -7,6 +7,10 @@
 //!   ring thread which owns its own audio stream (cpal streams are `!Send`, so
 //!   the stream must be created and dropped on that thread);
 //! - `stop`/`disarm` just flip flags; the ring thread observes them and exits.
+//!
+//! The scheduler keeps running as long as the process is alive, independent of
+//! whether any window is visible, and the ring thread surfaces the main window
+//! so the alarm is visible (and stoppable) even if it was hidden to the tray.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -15,6 +19,7 @@ use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Local};
 use rodio::{OutputStream, Sink};
+use tauri::{AppHandle, Manager};
 
 use crate::schedule;
 use crate::siren::{SoundKind, Tone};
@@ -40,6 +45,13 @@ struct State {
     force_volume: bool,
     ringing: bool,
     stop: Option<Arc<AtomicBool>>,
+}
+
+/// What the ring thread needs, captured atomically at fire time.
+struct RingConfig {
+    sound: SoundKind,
+    force_volume: bool,
+    stop: Arc<AtomicBool>,
 }
 
 /// Snapshot of the engine for the UI.
@@ -129,7 +141,7 @@ impl AlarmEngine {
     }
 
     /// Start the single background scheduler thread. Call once at startup.
-    pub fn start_scheduler(self: &Arc<Self>) {
+    pub fn start_scheduler(self: &Arc<Self>, app: AppHandle) {
         let engine = Arc::clone(self);
         thread::spawn(move || loop {
             thread::sleep(Duration::from_secs(1));
@@ -144,28 +156,43 @@ impl AlarmEngine {
                     state.ringing = true;
                     let flag = Arc::new(AtomicBool::new(false));
                     state.stop = Some(Arc::clone(&flag));
-                    Some((state.sound, state.force_volume, flag))
+                    Some(RingConfig {
+                        sound: state.sound,
+                        force_volume: state.force_volume,
+                        stop: flag,
+                    })
                 } else {
                     None
                 }
             };
 
-            if let Some((sound, force_volume, flag)) = fire {
+            if let Some(config) = fire {
                 let engine = Arc::clone(&engine);
-                thread::spawn(move || engine.ring(sound, force_volume, flag));
+                let app = app.clone();
+                thread::spawn(move || engine.ring(config, app));
             }
         });
     }
 
-    fn ring(&self, sound: SoundKind, force_volume: bool, stop: Arc<AtomicBool>) {
+    fn ring(&self, config: RingConfig, app: AppHandle) {
+        // Surface the window so the user can see the alarm and hit Stop, even
+        // if it was hidden to the tray.
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.unminimize();
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+
         let started = Instant::now();
         if let Ok((_stream, handle)) = OutputStream::try_default() {
             if let Ok(sink) = Sink::try_new(&handle) {
-                while !stop.load(Ordering::SeqCst) && started.elapsed().as_secs() < MAX_RING_SECS {
-                    if force_volume {
+                while !config.stop.load(Ordering::SeqCst)
+                    && started.elapsed().as_secs() < MAX_RING_SECS
+                {
+                    if config.force_volume {
                         let _ = volume::maximize();
                     }
-                    sink.append(Tone::new(sound, RING_BURST));
+                    sink.append(Tone::new(config.sound, RING_BURST));
                     sink.sleep_until_end();
                 }
                 sink.stop();
