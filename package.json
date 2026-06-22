@@ -1,0 +1,40 @@
+{
+  "name": "loud-alarm",
+  "version": "0.1.0",
+  "description": "A loud cross-platform alarm that beats a muted system volume and sounds through Focus / Do Not Disturb",
+  "type": "module",
+  "license": "MIT",
+  "author": "Loud Alarm contributors",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/adipascu/loud-alarm"
+  },
+  "scripts": {
+    "start": "vite",
+    "dev": "vite",
+    "build": "vite build",
+    "serve": "vite preview",
+    "tauri": "tauri",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "solid-js": "^1.9.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@solidjs/testing-library": "^0.8.10",
+    "@tauri-apps/cli": "^2",
+    "@testing-library/jest-dom": "^6.6.3",
+    "jsdom": "^25.0.1",
+    "typescript": "~5.6.2",
+    "vite": "^6.0.3",
+    "vite-plugin-solid": "^2.11.0",
+    "vitest": "^3.2.6"
+  }
+}
