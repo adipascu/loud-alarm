@@ -66,7 +66,7 @@ pub fn set_commands(level: u8, muted: bool) -> Vec<VolumeCommand> {
     {
         // Reliable absolute volume control on Windows needs a native mixer
         // crate; tracked as a follow-up. Loudness still comes from in-app gain.
-        let _ = muted;
+        let _ = (level, muted);
         Vec::new()
     }
 }
